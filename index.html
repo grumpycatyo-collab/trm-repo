@@ -40,6 +40,7 @@
 <!-- UI Overlay -->
 <div id="ui">
   <div id="message">Point your camera at the <strong>Winter Landscape (Snow)</strong> image to begin.</div>
+  <div id="controls"></div>
   <div class="small">Progress: <span id="progress">0/3</span> | Current: <span id="currentMarker">none</span></div>
   <div style="margin-top:8px;">
     <button class="btn" id="restartBtn">Restart</button>
@@ -127,6 +128,7 @@
 
 const UI = {
   message: document.getElementById('message'),
+  controls: document.getElementById('controls'),
   progress: document.getElementById('progress'),
   currentMarkerLabel: document.getElementById('currentMarker'),
   loader: document.getElementById('loader'),
@@ -137,9 +139,17 @@ const UI = {
 let state = "idle";
 let currentActiveMarker = null;
 let scannedCount = 0;
+let chosenPath = null; // 'cozy' or 'adventure'
 
-// Expected sequence
-const EXPECTED_SEQUENCE = ['marker-snow', 'marker-fire', 'marker-tree'];
+// Branching sequences
+const COZY_PATH = ['marker-snow', 'marker-fire', 'marker-tree']; // Snow → Fire → Tree
+const ADVENTURE_PATH = ['marker-snow', 'marker-tree', 'marker-fire']; // Snow → Tree → Fire
+
+function getExpectedSequence() {
+  if (chosenPath === 'cozy') return COZY_PATH;
+  if (chosenPath === 'adventure') return ADVENTURE_PATH;
+  return null;
+}
 
 // Marker friendly names
 const markerNames = {
@@ -169,14 +179,32 @@ function updateProgress() {
   UI.progress.innerText = `${scannedCount}/3`;
 }
 
+function addButton(text, onClick, id) {
+  const b = document.createElement('button');
+  b.className = 'btn';
+  if (id) b.id = id;
+  b.innerText = text;
+  b.onclick = onClick;
+  b.style.marginTop = '8px';
+  b.style.display = 'block';
+  UI.controls.appendChild(b);
+  return b;
+}
+
 function getNextExpectedMarker() {
-  if (scannedCount < EXPECTED_SEQUENCE.length) {
-    return EXPECTED_SEQUENCE[scannedCount];
+  const sequence = getExpectedSequence();
+  if (sequence && scannedCount < sequence.length) {
+    return sequence[scannedCount];
   }
   return null;
 }
 
 function isCorrectMarker(markerId) {
+  // First marker (snow) is always correct
+  if (scannedCount === 0 && markerId === 'marker-snow') {
+    return true;
+  }
+
   const expected = getNextExpectedMarker();
   return markerId === expected;
 }
@@ -220,21 +248,53 @@ function handleCorrectMarker(markerId) {
   scannedCount++;
   updateProgress();
 
-  switch (markerId) {
-    case 'marker-snow':
-      state = 'snowScanned';
-      setMessage('<span class="success">✓ Correct!</span> Snow scanned (1/3). Now scan the <strong>🔥 Fire</strong> image.');
-      break;
+  // First marker - Snow (choose your path)
+  if (markerId === 'marker-snow' && scannedCount === 1) {
+    state = 'choosingPath';
+    showPathChoice();
+    return;
+  }
 
-    case 'marker-fire':
-      state = 'fireScanned';
-      setMessage('<span class="success">✓ Correct!</span> Fire scanned (2/3). Now scan the <strong>🎄 Tree</strong> image.');
-      break;
+  // Path-specific messages
+  if (chosenPath === 'cozy') {
+    handleCozyPath(markerId);
+  } else if (chosenPath === 'adventure') {
+    handleAdventurePath(markerId);
+  }
+}
 
-    case 'marker-tree':
-      state = 'complete';
-      setMessage('<span class="success">🎉 SUCCESS!</span> You scanned all three markers in the correct order! Well done!');
-      break;
+function showPathChoice() {
+  UI.controls.innerHTML = '';
+  setMessage('<span class="success">✓ Snow scanned!</span> The winter landscape stretches before you...<br/><br/><strong>Choose your path:</strong>');
+
+  const cozyBtn = addButton('🔥 Seek Warmth (Fire → Tree)', () => {
+    chosenPath = 'cozy';
+    setMessage('You choose the path of comfort. Find the <strong>🔥 Fire</strong> to warm yourself.');
+    UI.controls.innerHTML = '';
+  });
+
+  const adventureBtn = addButton('🎄 Explore Outside (Tree → Fire)', () => {
+    chosenPath = 'adventure';
+    setMessage('You choose adventure! Find the <strong>🎄 Tree</strong> in the winter wonderland.');
+    UI.controls.innerHTML = '';
+  });
+}
+
+function handleCozyPath(markerId) {
+  if (markerId === 'marker-fire' && scannedCount === 2) {
+    setMessage('<span class="success">✓ Fire found!</span> The flames dance warmly. Now find the <strong>🎄 Tree</strong> to complete your cozy evening.');
+  } else if (markerId === 'marker-tree' && scannedCount === 3) {
+    state = 'complete';
+    setMessage('<span class="success">🎉 COZY PATH COMPLETE!</span><br/><br/>"But the fire is so delightful!"<br/><br/>You\'ve created the perfect cozy winter evening by the tree. ❄️🔥🎄');
+  }
+}
+
+function handleAdventurePath(markerId) {
+  if (markerId === 'marker-tree' && scannedCount === 2) {
+    setMessage('<span class="success">✓ Tree discovered!</span> A beautiful sight in the snow! Now return to the <strong>🔥 Fire</strong> to warm up.');
+  } else if (markerId === 'marker-fire' && scannedCount === 3) {
+    state = 'complete';
+    setMessage('<span class="success">🎉 ADVENTURE PATH COMPLETE!</span><br/><br/>"And since we\'ve no place to go... Let it snow!"<br/><br/>After your winter adventure, the fire welcomes you home. 🎄❄️🔥');
   }
 }
 
@@ -244,7 +304,7 @@ function handleWrongMarker(markerId) {
   const expectedName = markerNames[expected];
   const scannedName = markerNames[markerId];
 
-  setMessage(`<span class="error">✗ Wrong order!</span> You scanned ${scannedName}, but you need to scan ${expectedName} next. Please scan in order: ❄️ Snow → 🔥 Fire → 🎄 Tree`);
+  setMessage(`<span class="error">✗ Wrong order!</span><br/><br/>"Oh, the weather outside is frightful..."<br/><br/>You scanned ${scannedName}, but you need to scan ${expectedName} next. Please scan in order: ❄️ Snow → 🔥 Fire → 🎄 Tree`);
 }
 
 // Restart game
@@ -252,11 +312,15 @@ function restartGame() {
   scannedCount = 0;
   state = 'idle';
   currentActiveMarker = null;
+  chosenPath = null;
 
   // Hide all models
   document.querySelectorAll('a-entity[gltf-model]').forEach(el => {
     el.setAttribute('visible', 'false');
   });
+
+  // Clear controls
+  UI.controls.innerHTML = '';
 
   updateProgress();
   setMessage('Game restarted. Point your camera at the <strong>❄️ Winter Landscape (Snow)</strong> image to begin.');
